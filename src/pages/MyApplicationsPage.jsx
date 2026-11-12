@@ -7,10 +7,11 @@ import "../styles/MyApplicationsPage.css";
 import locationLogo from '../assets/icon-location.png';
 import calendarminimalLogo from '../assets/calendar-minimal-icon.png';
 
-import { CircularCheckSuccessIcon, BasiconsDocumentIcon, BasiconsBriefcaseIcon } from "../components/icons/CustomIcons";
+import { CircularCheckSuccessIcon, BasiconsDocumentIcon, BasiconsBriefcaseIcon, CheckIcon, BasiconsFolderIcon } from "../components/icons/CustomIcons";
 import Loader from '../components/Loader';
 
 export default function MyApplicationsPage() {
+  
   const navigate = useNavigate();
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -113,33 +114,7 @@ export default function MyApplicationsPage() {
     setLoading(false);
   };
 
-  // ✅ Re-assessment Handler
-  const handleReassess = async (app) => {
-    if (!reassessFile) {
-      setReassessError('Please choose a new PDS file.');
-      return;
-    }
-
-    setReassessLoading(true);
-    setReassessError('');
-
-    try {
-      const { newScore } = await reassessApplication({
-        application: app,
-        newFile: reassessFile
-      });
-
-      setReassessApp(null);
-      setReassessFile(null);
-      await loadApplications();
-      alert(`Re-assessment complete!\n\nNew score: ${newScore}%`);
-    } catch (err) {
-      console.error('Re-assessment error:', err);
-      setReassessError(err.message);
-    } finally {
-      setReassessLoading(false);
-    }
-  };
+  
 
   const getStatusColor = (status) => {
     const colors = {
@@ -408,6 +383,51 @@ export default function MyApplicationsPage() {
     hired: applications.filter(a => a.status === 'HIRED').length
   };
 
+
+  const [reassessSuccess, setReassessSuccess] = useState(null);
+  const handleReassess = async (app) => {
+  if (!reassessFile) {
+    setReassessError('Please choose a new PDS file.');
+    return;
+  }
+
+  setReassessLoading(true);
+  setReassessError('');
+
+  const oldScore = getDisplayScore(app);
+
+  try {
+    const { newScore } = await reassessApplication({
+      application: app,
+      newFile: reassessFile
+    });
+
+    setReassessApp(null);
+    setReassessFile(null);
+    await loadApplications();
+
+    // Refresh the open Details modal if it's still visible
+    if (showDetailsModal && selectedApplication?.id === app.id) {
+      const { data: updatedApp } = await supabase
+        .from('applications')
+        .select('*')
+        .eq('id', app.id)
+        .single();
+      setSelectedApplication({ ...updatedApp, job_postings: app.job_postings });
+    }
+
+    // 🆕 Show the success popup
+    setReassessSuccess({ app, oldScore, newScore });
+
+  } catch (err) {
+    console.error('Re-assessment error:', err);
+    setReassessError(err.message);
+  } finally {
+    setReassessLoading(false);
+  }
+};
+
+
   return (
     <>
       <Navbar userRole="applicant" />
@@ -515,31 +535,7 @@ export default function MyApplicationsPage() {
                       View Details
                     </button>
 
-                    {/* ✅ Re-assess Button */}
-                    {['PENDING', 'REVIEWING'].includes(app.status) && (
-                      <button
-                        onClick={() => {
-                          setReassessApp(app);
-                          setReassessFile(null);
-                          setReassessError('');
-                        }}
-                        style={{
-                          padding: '8px 14px',
-                          background: '#EEF2FF',
-                          color: '#4F46E5',
-                          border: '1px solid #C7D2FE',
-                          borderRadius: '6px',
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                        }}
-                      >
-                        🔄 Re-assess PDS
-                      </button>
-                    )}
+                 
 
                     {canWithdrawApp && (
                       <button 
@@ -697,10 +693,10 @@ export default function MyApplicationsPage() {
             }}
           >
             <h3 style={{ margin: '0 0 6px', fontSize: '18px', color: '#1a3a5c' }}>
-              Re-assess PDS
+              Upload New PDS
             </h3>
             <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
-              Upload a new Personal Data Sheet. Your application will be re-screened and the score updated. Your old score is saved in history.
+              Upload a new Personal Data Sheet. Your application will be re-screened and the score updated.
             </p>
 
             {/* Current score */}
@@ -725,26 +721,35 @@ export default function MyApplicationsPage() {
               </div>
             )}
 
-            {/* File picker */}
-            <label style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-              padding: '24px', border: '2px dashed #C7D2FE', borderRadius: '8px',
-              background: reassessFile ? '#EEF2FF' : '#F8FAFC',
-              cursor: 'pointer',
-              fontSize: '13px',
-              color: reassessFile ? '#4F46E5' : '#64748b',
-              fontWeight: 600,
-              marginBottom: '16px'
-            }}>
-              {reassessFile ? `📄 ${reassessFile.name}` : '📁 Choose a new PDS (PDF)'}
-              <input
-                type="file"
-                accept=".pdf"
-                style={{ display: 'none' }}
-                onChange={(e) => setReassessFile(e.target.files[0] || null)}
-                disabled={reassessLoading}
-              />
-            </label>
+           <label style={{
+  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+  padding: '24px', border: '2px dashed #C7D2FE', borderRadius: '8px',
+  background: reassessFile ? '#EEF2FF' : '#F8FAFC',
+  cursor: 'pointer',
+  fontSize: '13px',
+  color: reassessFile ? '#4F46E5' : '#64748b',
+  fontWeight: 600,
+  marginBottom: '16px'
+}}>
+  {reassessFile ? (
+    <>
+      <BasiconsDocumentIcon size={16} color="#4F46E5" />
+      {reassessFile.name}
+    </>
+  ) : (
+    <>
+      <BasiconsFolderIcon size={16} color="#64748b" />
+      Choose a new PDS
+    </>
+  )}
+  <input
+    type="file"
+    accept=".xlsx,.xls"
+    style={{ display: 'none' }}
+    onChange={(e) => setReassessFile(e.target.files[0] || null)}
+    disabled={reassessLoading}
+  />
+</label>
 
             {/* Actions */}
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
@@ -1070,7 +1075,6 @@ export default function MyApplicationsPage() {
             setReassessApp(selectedApplication);
             setReassessFile(null);
             setReassessError('');
-            setShowDetailsModal(false);
           }}
           style={{
             padding: '6px 12px',
@@ -1089,7 +1093,7 @@ export default function MyApplicationsPage() {
           onMouseEnter={(e) => e.currentTarget.style.background = '#e0e7ff'}
           onMouseLeave={(e) => e.currentTarget.style.background = '#EEF2FF'}
         >
-          🔄 Re-upload
+           Upload New
         </button>
       )}
     </div>
@@ -1153,6 +1157,133 @@ export default function MyApplicationsPage() {
                 </button>
               </div>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+
+        {/* ✅ Re-assessment Success Popup */}
+      {reassessSuccess && (
+        <div
+          onClick={() => setReassessSuccess(null)}
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 10000, padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'white',
+              borderRadius: '16px',
+              padding: '32px 28px',
+              maxWidth: '420px',
+              width: '100%',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+              textAlign: 'center',
+            }}
+          >
+            {/* Success icon */}
+            <div style={{
+              width: 64, height: 64,
+              borderRadius: '50%',
+              background: '#dcfce7',
+              color: '#16a34a',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 16px',
+              fontSize: 32,
+              fontWeight: 700,
+            }}>
+               <CheckIcon size={32} style={{ color: 'white' }} />
+            </div>
+
+            <h3 style={{
+              margin: '0 0 6px',
+              fontSize: '20px',
+              fontWeight: 700,
+              color: '#1a3a5c',
+            }}>
+              Re-assessment Complete
+            </h3>
+            <p style={{
+              margin: '0 0 24px',
+              fontSize: '13px',
+              color: '#64748b',
+              lineHeight: 1.5,
+            }}>
+              Your application has been re-screened with the new PDS.
+            </p>
+
+            {/* Score comparison */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '16px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
+              padding: '20px 16px',
+              marginBottom: '20px',
+            }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 600, marginBottom: '4px' }}>
+                  Previous
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: 700, color: '#94a3b8', textDecoration: 'line-through' }}>
+                  {reassessSuccess.oldScore}%
+                </div>
+              </div>
+
+              <div style={{ color: '#cbd5e1', fontSize: '18px' }}>→</div>
+
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '11px', color: '#4F46E5', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: 700, marginBottom: '4px' }}>
+                  New Score
+                </div>
+                <div style={{ fontSize: '28px', fontWeight: 800, color: '#4F46E5' }}>
+                  {reassessSuccess.newScore}%
+                </div>
+              </div>
+            </div>
+
+            <p style={{
+              margin: '0 0 24px',
+              fontSize: '12px',
+              color: '#94a3b8',
+              lineHeight: 1.5,
+            }}>
+              Previous score has been saved to your application history.
+              HR will see your updated assessment.
+            </p>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+  onClick={() => setReassessSuccess(null)}
+  style={{
+    flex: 1,
+    padding: '12px',
+    background: '#F1F5F9',
+    color: '#475569',
+    border: '1px solid #E2E8F0',
+    borderRadius: '8px',
+    fontWeight: 600,
+    fontSize: '13px',
+    cursor: 'pointer',
+    transition: 'background 0.15s ease',
+  }}
+  onMouseEnter={(e) => e.currentTarget.style.background = '#E2E8F0'}
+  onMouseLeave={(e) => e.currentTarget.style.background = '#F1F5F9'}
+>
+                Close
+              </button>
+            
             </div>
           </div>
         </div>
