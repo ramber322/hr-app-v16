@@ -1040,24 +1040,106 @@ export default function MyApplicationsPage() {
                 </div>
               </div>
 
-              <div className="detail-section" style={{ background: '#f8fafc', border: '1px solid #e8ebf5', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
-                <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#1a3a5c', letterSpacing: '0.8px', textTransform: 'uppercase', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ 
-                    width: '8px', 
-                    height: '8px', 
-                    borderRadius: '50%', 
-                    background: '#6366f1',
-                    boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.15)',
-                    flexShrink: 0 
-                  }} /> 
-                  Documents Submitted
-                </h4>
-                <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#1a1f36' }}>
-                  {selectedApplication.docs_submitted?.pds && <span className="doc-check" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ color: '#10b981' }}>✓</span> Personal Data Sheet (PDS)</span>}
-                  {selectedApplication.docs_submitted?.transcript && <span className="doc-check" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ color: '#10b981' }}>✓</span> Transcript of Records</span>}
-                  {selectedApplication.docs_submitted?.performanceRating && <span className="doc-check" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ color: '#10b981' }}>✓</span> Performance Rating</span>}
-                </div>
-              </div>
+             {/* ── DOCUMENTS SUBMITTED ── */}
+<div className="detail-section" style={{ background: '#f8fafc', border: '1px solid #e8ebf5', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
+  <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#1a3a5c', letterSpacing: '0.8px', textTransform: 'uppercase', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+    <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#6366f1', boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.15)', flexShrink: 0 }} /> 
+    Documents Submitted
+  </h4>
+  
+  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '13px', color: '#1a1f36' }}>
+    
+    {/* --- PDS --- */}
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {selectedApplication.docs_submitted?.pds ? (
+          <span style={{ color: '#10b981', fontSize: '16px', fontWeight: 'bold' }}>✓</span>
+        ) : (
+          <span style={{ color: '#ef4444', fontSize: '16px', fontWeight: 'bold' }}>✕</span>
+        )}
+        <div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: '#1a3a5c' }}>Personal Data Sheet (PDS)</div>
+          <div style={{ fontSize: '11px', color: '#64748b' }}>Primary document for screening</div>
+        </div>
+      </div>
+      
+      {/* Re-upload button for PDS */}
+      {['PENDING', 'REVIEWING'].includes(selectedApplication.status) && (
+        <button
+          onClick={() => {
+            setReassessApp(selectedApplication);
+            setReassessFile(null);
+            setReassessError('');
+            setShowDetailsModal(false);
+          }}
+          style={{
+            padding: '6px 12px',
+            background: '#EEF2FF',
+            color: '#4F46E5',
+            border: '1px solid #c7d2fe',
+            borderRadius: '6px',
+            fontSize: '11px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            transition: 'background 0.2s ease'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = '#e0e7ff'}
+          onMouseLeave={(e) => e.currentTarget.style.background = '#EEF2FF'}
+        >
+          🔄 Re-upload
+        </button>
+      )}
+    </div>
+
+    {/* --- TRANSCRIPT --- */}
+    {selectedApplication.job_postings?.required_docs?.transcriptRecords && (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {selectedApplication.docs_submitted?.transcript ? (
+            <span style={{ color: '#10b981', fontSize: '16px', fontWeight: 'bold' }}>✓</span>
+          ) : (
+            <span style={{ color: '#ef4444', fontSize: '16px', fontWeight: 'bold' }}>✕</span>
+          )}
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#1a3a5c' }}>Transcript of Records</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Proof of educational attainment</div>
+          </div>
+        </div>
+        
+        {/* Placeholder for future Transcript re-upload */}
+        {['PENDING', 'REVIEWING'].includes(selectedApplication.status) && (
+           <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>Coming soon</span>
+        )}
+      </div>
+    )}
+
+    {/* --- PERFORMANCE RATING --- */}
+    {selectedApplication.job_postings?.required_docs?.performanceRating && (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {selectedApplication.docs_submitted?.performanceRating ? (
+            <span style={{ color: '#10b981', fontSize: '16px', fontWeight: 'bold' }}>✓</span>
+          ) : (
+            <span style={{ color: '#ef4444', fontSize: '16px', fontWeight: 'bold' }}>✕</span>
+          )}
+          <div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#1a3a5c' }}>Performance Rating</div>
+            <div style={{ fontSize: '11px', color: '#64748b' }}>Most recent evaluation</div>
+          </div>
+        </div>
+        
+        {/* Placeholder for future PR re-upload */}
+        {['PENDING', 'REVIEWING'].includes(selectedApplication.status) && (
+           <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>Coming soon</span>
+        )}
+      </div>
+    )}
+
+  </div>
+</div>
 
               <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
                 <button 
