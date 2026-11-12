@@ -207,7 +207,22 @@ export default function JobPostingPage() {
 const [editFormData, setEditFormData] = useState(null);
 
 const handleEditJob = async () => {
-  try {
+   try {
+    // 🆕 Prevent shortening closing date when applications exist
+    if (hasApplications) {
+      const oldDate = showDetails.closing_date;
+      const newDate = editFormData.closing_date;
+      if (newDate && newDate < oldDate) {
+        alert(
+          `You cannot shorten the closing date once applications have been received.\n\n` +
+          `Current: ${oldDate}\nNew: ${newDate}\n\n` +
+          `You can only extend the deadline.`
+        );
+        setShowEditConfirm(false);
+        setIsSaving(false);
+        return;
+      }
+    }
     const statusToSave = editFormData.status || 'OPEN';
     
     // Use the updated salary grade and monthly salary from editFormData
@@ -512,6 +527,17 @@ const handleDeleteJob = async () => {
     
     return matchesSearch && matchesLocation && matchesStatus;
   });
+
+  // ── LOCK POLICY: requirements are locked once applications exist ──
+const hasApplications = (showDetails?.applicants_count ?? 0) > 0;
+const isLocked = (field) => hasApplications && ![
+  'place_of_assignment',
+  'item_no',
+  'instructions',
+  'closing_date',
+  'status'
+].includes(field);
+
 
   return (
     <>
@@ -1057,31 +1083,35 @@ const handleDeleteJob = async () => {
         gap: '12px'
       }}>
         {isEditing ? (
-          <select
-            value={editFormData?.position_title || ''}
-            onChange={(e) => {
-              const title = e.target.value;
-              const sg = POSITION_SG_MAPPING[title] || "";
-              const salary = sg ? DBM_SALARY_TABLE[sg] || 0 : 0;
+         <select
+  value={editFormData?.position_title || ''}
+  onChange={(e) => {
+    const title = e.target.value;
+    const sg = POSITION_SG_MAPPING[title] || "";
+    const salary = sg ? DBM_SALARY_TABLE[sg] || 0 : 0;
 
-              setEditFormData({
-                ...editFormData,
-                position_title: title,
-                salary_grade: sg,
-                monthly_salary: salary
-              });
-            }}
-            style={{
-              width: '100%',
-              padding: '10px 14px',
-              border: '1px solid #bfdbfe',
-              borderRadius: '8px',
-              fontSize: '14px',
-              fontWeight: 500,
-              height: '42px',
-              background: 'white'
-            }}
-          >
+    setEditFormData({
+      ...editFormData,
+      position_title: title,
+      salary_grade: sg,
+      monthly_salary: salary
+    });
+  }}
+  disabled={isLocked('position_title')}
+  title={hasApplications ? 'Locked — applicants exist. Close & repost to change.' : ''}
+  style={{
+    width: '100%',
+    padding: '10px 14px',
+    border: '1px solid #bfdbfe',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 500,
+    height: '42px',
+    background: isLocked('position_title') ? '#F1F5F9' : 'white',
+    cursor: isLocked('position_title') ? 'not-allowed' : 'pointer',
+    opacity: isLocked('position_title') ? 0.6 : 1,
+  }}
+>
             <option value="">Select Position...</option>
             {POSITION_TITLES.map(title => (
               <option key={title} value={title}>{title}</option>
@@ -1124,7 +1154,30 @@ const handleDeleteJob = async () => {
         }}>×</button>
       </div>
 
-      <div className="modal-body">
+       <div className="modal-body">
+
+        {/* 🆕 LOCK BANNER */}
+        {isEditing && hasApplications && (
+          <div style={{
+            background: '#FEF3C7',
+            border: '1px solid #FDE68A',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            marginBottom: '16px',
+            display: 'flex',
+            gap: '10px',
+            alignItems: 'flex-start',
+          }}>
+            <span style={{ fontSize: '18px' }}>🔒</span>
+            <div style={{ fontSize: '13px', color: '#92400E', lineHeight: 1.5 }}>
+              <strong>Qualification Standards are locked.</strong>{' '}
+              This job has {showDetails.applicants_count} applicant
+              {showDetails.applicants_count > 1 ? 's' : ''}. You can still update
+              Instructions, Place of Assignment, Closing Date (extend only), and Status.
+              To change requirements, close this job and post a new vacancy.
+            </div>
+          </div>
+        )}
 
         {/* ── JOB DETAILS ── */}
         <div style={{
@@ -1168,12 +1221,12 @@ const handleDeleteJob = async () => {
             <div>
               <span className="detail-label">Item No.</span>
               {isEditing ? (
-                <input
-                  type="text"
-                  value={editFormData?.item_no || ''}
-                  onChange={(e) => setEditFormData({...editFormData, item_no: e.target.value})}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px' }}
-                />
+              <input
+  type="text"
+  value={editFormData?.item_no || ''}
+  onChange={(e) => setEditFormData({...editFormData, item_no: e.target.value})}
+  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px' }}
+/>
               ) : (
                 <span className="detail-value">{showDetails.item_no}</span>
               )}
@@ -1290,10 +1343,17 @@ const handleDeleteJob = async () => {
               <span className="detail-label">Education</span>
               {isEditing ? (
                 <select
-                  value={editFormData?.required_education || ''}
-                  onChange={(e) => setEditFormData({...editFormData, required_education: parseInt(e.target.value)})}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px' }}
-                >
+  value={editFormData?.required_education || ''}
+  onChange={(e) => setEditFormData({...editFormData, required_education: parseInt(e.target.value)})}
+  disabled={isLocked('required_education')}
+  title={hasApplications ? 'Locked — applicants exist.' : ''}
+  style={{
+    width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px',
+    background: isLocked('required_education') ? '#F1F5F9' : 'white',
+    cursor: isLocked('required_education') ? 'not-allowed' : 'pointer',
+    opacity: isLocked('required_education') ? 0.6 : 1,
+  }}
+>
                   {EDUCATION_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
@@ -1306,10 +1366,17 @@ const handleDeleteJob = async () => {
               <span className="detail-label">Eligibility</span>
               {isEditing ? (
                 <select
-                  value={editFormData?.required_eligibility || ''}
-                  onChange={(e) => setEditFormData({...editFormData, required_eligibility: e.target.value})}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px' }}
-                >
+  value={editFormData?.required_eligibility || ''}
+  onChange={(e) => setEditFormData({...editFormData, required_eligibility: e.target.value})}
+  disabled={isLocked('required_eligibility')}
+  title={hasApplications ? 'Locked — applicants exist.' : ''}
+  style={{
+    width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px',
+    background: isLocked('required_eligibility') ? '#F1F5F9' : 'white',
+    cursor: isLocked('required_eligibility') ? 'not-allowed' : 'pointer',
+    opacity: isLocked('required_eligibility') ? 0.6 : 1,
+  }}
+>
                   {ELIGIBILITY_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
@@ -1322,10 +1389,17 @@ const handleDeleteJob = async () => {
               <span className="detail-label">Training</span>
               {isEditing ? (
                 <select
-                  value={editFormData?.required_training || ''}
-                  onChange={(e) => setEditFormData({...editFormData, required_training: parseInt(e.target.value)})}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px' }}
-                >
+  value={editFormData?.required_training || ''}
+  onChange={(e) => setEditFormData({...editFormData, required_training: parseInt(e.target.value)})}
+  disabled={isLocked('required_training')}
+  title={hasApplications ? 'Locked — applicants exist.' : ''}
+  style={{
+    width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px',
+    background: isLocked('required_training') ? '#F1F5F9' : 'white',
+    cursor: isLocked('required_training') ? 'not-allowed' : 'pointer',
+    opacity: isLocked('required_training') ? 0.6 : 1,
+  }}
+>
                   {TRAINING_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
@@ -1338,10 +1412,17 @@ const handleDeleteJob = async () => {
               <span className="detail-label">Work Experience</span>
               {isEditing ? (
                 <select
-                  value={editFormData?.required_work_experience || ''}
-                  onChange={(e) => setEditFormData({...editFormData, required_work_experience: parseInt(e.target.value)})}
-                  style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px' }}
-                >
+  value={editFormData?.required_work_experience || ''}
+  onChange={(e) => setEditFormData({...editFormData, required_work_experience: parseInt(e.target.value)})}
+  disabled={isLocked('required_work_experience')}
+  title={hasApplications ? 'Locked — applicants exist.' : ''}
+  style={{
+    width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '6px',
+    background: isLocked('required_work_experience') ? '#F1F5F9' : 'white',
+    cursor: isLocked('required_work_experience') ? 'not-allowed' : 'pointer',
+    opacity: isLocked('required_work_experience') ? 0.6 : 1,
+  }}
+>
                   {EXPERIENCE_OPTIONS.map(opt => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
@@ -1524,11 +1605,6 @@ const handleDeleteJob = async () => {
     </div>
   </div>
 )}
-
-
-
-
-
 
 
 

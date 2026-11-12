@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { supabase } from "../lib/supabase";
+import { reassessApplication } from "../services/reassessApplication"; 
 import "../styles/MyApplicationsPage.css";
 import locationLogo from '../assets/icon-location.png';
 import calendarminimalLogo from '../assets/calendar-minimal-icon.png';
+
 import { CircularCheckSuccessIcon, BasiconsDocumentIcon, BasiconsBriefcaseIcon } from "../components/icons/CustomIcons";
 import Loader from '../components/Loader';
 
@@ -16,9 +18,15 @@ export default function MyApplicationsPage() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
 
-//Alert Withdrawal
-const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-const [selectedWithdrawApp, setSelectedWithdrawApp] = useState(null);
+  // Alert Withdrawal
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [selectedWithdrawApp, setSelectedWithdrawApp] = useState(null);
+
+  // ✅ Re-assessment State
+  const [reassessApp, setReassessApp] = useState(null);
+  const [reassessFile, setReassessFile] = useState(null);
+  const [reassessLoading, setReassessLoading] = useState(false);
+  const [reassessError, setReassessError] = useState('');
 
   // Education level labels
   const EDUCATION_LABELS = {
@@ -51,6 +59,12 @@ const [selectedWithdrawApp, setSelectedWithdrawApp] = useState(null);
   };
 
   const loadApplications = async (applicantId) => {
+    // If applicantId isn't passed (like when refreshing after reassess), get it first
+    if (!applicantId) {
+      const { data: { user } } = await supabase.auth.getUser();
+      applicantId = user?.id;
+    }
+
     setLoading(true);
     
     const { data: applicationsData, error: applicationsError } = await supabase
@@ -99,21 +113,49 @@ const [selectedWithdrawApp, setSelectedWithdrawApp] = useState(null);
     setLoading(false);
   };
 
- const getStatusColor = (status) => {
-  const colors = {
-    'PENDING': { bg: '#FFF3E0', color: '#E65100', text: 'Pending Review' },
-    'REVIEWING': { bg: '#E3F2FD', color: '#1565C0', text: 'Under Review' },
-    'QUALIFIED': { bg: '#E8F5E9', color: '#2E7D32', text: 'Qualified' },
-    'SHORTLISTED': { bg: '#E8F5E9', color: '#2E7D32', text: 'Shortlisted' },
-    'FOR_INTERVIEW': { bg: '#F3E5F5', color: '#7B1FA2', text: 'For Interview' },
-    'INTERVIEW_SCHEDULED': { bg: '#F3E5F5', color: '#7B1FA2', text: 'Interview Scheduled' },
-    'HIRED': { bg: '#E8F5E9', color: '#1B5E20', text: 'Hired' },
-    'NOT_SELECTED': { bg: '#FFEBEE', color: '#C62828', text: 'Not Selected' },
-    'REJECTED': { bg: '#FFEBEE', color: '#C62828', text: 'Rejected' },
-    'WITHDRAWN': { bg: '#F3E5F5', color: '#6A1B9A', text: 'Withdrawn' }
+  // ✅ Re-assessment Handler
+  const handleReassess = async (app) => {
+    if (!reassessFile) {
+      setReassessError('Please choose a new PDS file.');
+      return;
+    }
+
+    setReassessLoading(true);
+    setReassessError('');
+
+    try {
+      const { newScore } = await reassessApplication({
+        application: app,
+        newFile: reassessFile
+      });
+
+      setReassessApp(null);
+      setReassessFile(null);
+      await loadApplications();
+      alert(`Re-assessment complete!\n\nNew score: ${newScore}%`);
+    } catch (err) {
+      console.error('Re-assessment error:', err);
+      setReassessError(err.message);
+    } finally {
+      setReassessLoading(false);
+    }
   };
-  return colors[status] || colors['PENDING'];
-};
+
+  const getStatusColor = (status) => {
+    const colors = {
+      'PENDING': { bg: '#FFF3E0', color: '#E65100', text: 'Pending Review' },
+      'REVIEWING': { bg: '#E3F2FD', color: '#1565C0', text: 'Under Review' },
+      'QUALIFIED': { bg: '#E8F5E9', color: '#2E7D32', text: 'Qualified' },
+      'SHORTLISTED': { bg: '#E8F5E9', color: '#2E7D32', text: 'Shortlisted' },
+      'FOR_INTERVIEW': { bg: '#F3E5F5', color: '#7B1FA2', text: 'For Interview' },
+      'INTERVIEW_SCHEDULED': { bg: '#F3E5F5', color: '#7B1FA2', text: 'Interview Scheduled' },
+      'HIRED': { bg: '#E8F5E9', color: '#1B5E20', text: 'Hired' },
+      'NOT_SELECTED': { bg: '#FFEBEE', color: '#C62828', text: 'Not Selected' },
+      'REJECTED': { bg: '#FFEBEE', color: '#C62828', text: 'Rejected' },
+      'WITHDRAWN': { bg: '#F3E5F5', color: '#6A1B9A', text: 'Withdrawn' }
+    };
+    return colors[status] || colors['PENDING'];
+  };
 
   const getDocumentStatus = (docsSubmitted, docType) => {
     if (!docsSubmitted) return false;
@@ -130,54 +172,48 @@ const [selectedWithdrawApp, setSelectedWithdrawApp] = useState(null);
 
   const [successMessage, setSuccessMessage] = useState(null);
 
-const handleWithdraw = async (application) => {
-  // REMOVE THIS LINE (modal handles confirmation)
-  // if (!window.confirm('Are you sure you want to withdraw this application? This action cannot be undone.')) {
-  //   return;
-  // }
-  
-  setWithdrawing(true);
-  
-  try {
-    const { error: updateError } = await supabase
-      .from('applications')
-      .update({ 
-        status: 'WITHDRAWN',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', application.id);
+  const handleWithdraw = async (application) => {
+    setWithdrawing(true);
     
-    if (updateError) throw updateError;
-    
-    const { data: currentJob } = await supabase
-      .from('job_postings')
-      .select('applicants_count')
-      .eq('id', application.job_id)
-      .single();
+    try {
+      const { error: updateError } = await supabase
+        .from('applications')
+        .update({ 
+          status: 'WITHDRAWN',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', application.id);
+      
+      if (updateError) throw updateError;
+      
+      const { data: currentJob } = await supabase
+        .from('job_postings')
+        .select('applicants_count')
+        .eq('id', application.job_id)
+        .single();
 
-    const newCount = Math.max((currentJob?.applicants_count || 0) - 1, 0);
+      const newCount = Math.max((currentJob?.applicants_count || 0) - 1, 0);
 
-    const { error: countError } = await supabase
-      .from('job_postings')
-      .update({ applicants_count: newCount })
-      .eq('id', application.job_id);
+      const { error: countError } = await supabase
+        .from('job_postings')
+        .update({ applicants_count: newCount })
+        .eq('id', application.job_id);
+      
+      if (countError) throw countError;
+      
+      setSuccessMessage('Application withdrawn successfully!');
+      setTimeout(() => setSuccessMessage(null), 3000);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      await loadApplications(user.id);
+      
+    } catch (error) {
+      console.error('Error withdrawing application:', error);
+      alert('Failed to withdraw application. Please try again.');
+    }
     
-    if (countError) throw countError;
-    
-    // Show success message instead of alert
-    setSuccessMessage('Application withdrawn successfully!');
-    setTimeout(() => setSuccessMessage(null), 3000);
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    await loadApplications(user.id);
-    
-  } catch (error) {
-    console.error('Error withdrawing application:', error);
-    alert('Failed to withdraw application. Please try again.');
-  }
-  
-  setWithdrawing(false);
-};
+    setWithdrawing(false);
+  };
 
 
   const formatDate = (dateString) => {
@@ -215,63 +251,53 @@ const handleWithdraw = async (application) => {
     return years === 1 ? `${years} year` : `${years} years`;
   };
 
-  // ===== NEW: Format education recommendation with assementlike =====
- const formatEducationRecommendation = (rec) => {
-  // Education recommendation
-  if (rec.includes('education level')) {
-    const match = rec.match(/level (\d+).*level (\d+)/);
-    if (match) {
-      const current = parseInt(match[1]);
-      const required = parseInt(match[2]);
-      const currentLabel = EDUCATION_LABELS[current] || `Level ${current}`;
-      const requiredLabel = EDUCATION_LABELS[required] || `Level ${required}`;
-      
-      if (current < required) {
-        return `You have a ${currentLabel}. This position requires ${requiredLabel}.`;
-      } else {
-        return `You meet the required ${requiredLabel} qualification.`;
+  const formatEducationRecommendation = (rec) => {
+    if (rec.includes('education level')) {
+      const match = rec.match(/level (\d+).*level (\d+)/);
+      if (match) {
+        const current = parseInt(match[1]);
+        const required = parseInt(match[2]);
+        const currentLabel = EDUCATION_LABELS[current] || `Level ${current}`;
+        const requiredLabel = EDUCATION_LABELS[required] || `Level ${required}`;
+        
+        if (current < required) {
+          return `You have a ${currentLabel}. This position requires ${requiredLabel}.`;
+        } else {
+          return `You meet the required ${requiredLabel} qualification.`;
+        }
       }
     }
-  }
-    
-  // Training hours recommendation
-  if (rec.includes('training') || rec.includes('hours')) {
-    const match = rec.match(/(\d+)\s*(?:more)?\s*hours?/i);
-    if (match) {
-      const hours = parseInt(match[1]);
-      return `You need to complete ${hours} more hour${hours > 1 ? 's' : ''} of relevant training.`;
+      
+    if (rec.includes('training') || rec.includes('hours')) {
+      const match = rec.match(/(\d+)\s*(?:more)?\s*hours?/i);
+      if (match) {
+        const hours = parseInt(match[1]);
+        return `You need to complete ${hours} more hour${hours > 1 ? 's' : ''} of relevant training.`;
+      }
+      return rec;
     }
-    return rec;
-  }
-    
-    // Return as is if no match
+      
     return rec;
   };
 
-  // FIXED: Helper to check if a requirement is met based on status
   const isRequirementMet = (value) => {
     if (!value || !value.status) return false;
     const status = value.status;
     
-    // Check if status contains "NOT MET" - if so, return false immediately
     if (status.toUpperCase().includes('NOT MET')) {
       return false;
     }
     
-    // Check if status contains MET or EXCEEDS (case insensitive)
     return status.toUpperCase().includes('MET') || status.toUpperCase().includes('EXCEEDS');
   };
 
-  // FIXED: Generate human-readable display for breakdown items
   const getBreakdownDisplay = (key, value) => {
     const status = value.status || '';
     const required = value.required || 0;
     const actual = value.actual || 0;
     
-    // Clean status - remove emojis and extra text
     let cleanStatus = status;
     
-    // Remove EXCEEDS prefix and just show the message
     if (cleanStatus.includes('EXCEEDS')) {
       const match = cleanStatus.match(/EXCEEDS\s*\((.+)\)/);
       if (match) {
@@ -280,10 +306,8 @@ const handleWithdraw = async (application) => {
       return cleanStatus.replace('EXCEEDS', '').trim();
     }
     
-    // Check if it's NOT MET
     const isNotMet = status.toUpperCase().includes('NOT MET');
     
-    // For MET or partial
     if (key === 'Training Hours') {
       const progress = required > 0 ? Math.round((actual / required) * 100) : 0;
       const gap = required - actual;
@@ -320,7 +344,6 @@ const handleWithdraw = async (application) => {
     }
     
     if (key === 'Eligibility') {
-      // Handle unknown/no eligibility
       if (actual === 'unknown' || actual === 'none' || !actual) {
         if (status.toUpperCase().includes('NOT REQUIRED')) {
           return 'Not Required';
@@ -329,7 +352,6 @@ const handleWithdraw = async (application) => {
         }
       }
       
-      // FIXED: Handle NOT MET first
       if (isNotMet) {
         const eligLabel = getEligibilityLabel(actual);
         const reqLabel = getEligibilityLabel(required);
@@ -365,15 +387,13 @@ const handleWithdraw = async (application) => {
     return cleanStatus;
   };
 
-  // Helper to get the display score (hybrid score from ai_explanation.percentage or fallback to ai_match_score)
-const getDisplayScore = (app) => {
-  if (app.ai_explanation?.percentage !== undefined && app.ai_explanation?.percentage !== null) {
-    return app.ai_explanation.percentage;
-  }
-  return app.ai_match_score || 0;
-};
+  const getDisplayScore = (app) => {
+    if (app.ai_explanation?.percentage !== undefined && app.ai_explanation?.percentage !== null) {
+      return app.ai_explanation.percentage;
+    }
+    return app.ai_match_score || 0;
+  };
 
-  // Helper to get the requirements met display
   const getRequirementsMetDisplay = (app) => {
     if (app.ai_explanation?.requirements_met) {
       return app.ai_explanation.requirements_met;
@@ -494,13 +514,40 @@ const getDisplayScore = (app) => {
                     }}>
                       View Details
                     </button>
+
+                    {/* ✅ Re-assess Button */}
+                    {['PENDING', 'REVIEWING'].includes(app.status) && (
+                      <button
+                        onClick={() => {
+                          setReassessApp(app);
+                          setReassessFile(null);
+                          setReassessError('');
+                        }}
+                        style={{
+                          padding: '8px 14px',
+                          background: '#EEF2FF',
+                          color: '#4F46E5',
+                          border: '1px solid #C7D2FE',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        🔄 Re-assess PDS
+                      </button>
+                    )}
+
                     {canWithdrawApp && (
                       <button 
                         className="withdraw-btn" 
                         onClick={() => {
-      setSelectedWithdrawApp(app);
-      setShowWithdrawModal(true);
-    }}
+                          setSelectedWithdrawApp(app);
+                          setShowWithdrawModal(true);
+                        }}
                         disabled={withdrawing}
                       >
                         Withdraw
@@ -514,131 +561,238 @@ const getDisplayScore = (app) => {
         </div>
       </div>
       
-{/* Withdraw Confirmation Modal */}
-{showWithdrawModal && selectedWithdrawApp && (
-  <div className="modal-overlay" onClick={() => setShowWithdrawModal(false)}>
-    <div className="confirm-card" onClick={(e) => e.stopPropagation()} style={{ 
-      width: '500px',
-      maxWidth: '90vw'
-    }}>
-      {/* Simple Header with Icon */}
-      <div className="confirm-card-header" style={{ paddingBottom: '8px' }}>
-        <span className="confirm-icon" style={{ fontSize: '28px' }}>⚠️</span>
-        <h3 style={{ fontSize: '20px', margin: '4px 0 0 0' }}>Withdraw Application</h3>
-      </div>
-      
-      {/* Message */}
-      <div className="confirm-card-body" style={{ padding: '8px 24px 16px 24px' }}>
-        <p style={{ marginBottom: '12px', fontSize: '15px' }}>
-          Are you sure you want to withdraw your application for:
-        </p>
-        <p style={{ 
-          fontWeight: '600', 
-          fontSize: '17px', 
-          color: '#1a1f36',
-          marginBottom: '12px'
+      {/* Withdraw Confirmation Modal */}
+      {showWithdrawModal && selectedWithdrawApp && (
+        <div className="modal-overlay" onClick={() => setShowWithdrawModal(false)}>
+          <div className="confirm-card" onClick={(e) => e.stopPropagation()} style={{ 
+            width: '500px',
+            maxWidth: '90vw'
+          }}>
+            <div className="confirm-card-header" style={{ paddingBottom: '8px' }}>
+              <span className="confirm-icon" style={{ fontSize: '28px' }}>⚠️</span>
+              <h3 style={{ fontSize: '20px', margin: '4px 0 0 0' }}>Withdraw Application</h3>
+            </div>
+            
+            <div className="confirm-card-body" style={{ padding: '8px 24px 16px 24px' }}>
+              <p style={{ marginBottom: '12px', fontSize: '15px' }}>
+                Are you sure you want to withdraw your application for:
+              </p>
+              <p style={{ 
+                fontWeight: '600', 
+                fontSize: '17px', 
+                color: '#1a1f36',
+                marginBottom: '12px'
+              }}>
+                {selectedWithdrawApp.job_postings?.position_title || 'Position Not Found'}
+              </p>
+              <p style={{ 
+                color: '#6c757d', 
+                fontSize: '14px',
+                margin: 0
+              }}>
+                This action <strong>cannot be undone</strong>.
+              </p>
+            </div>
+            
+            <div className="confirm-card-footer" style={{ 
+              margin: '0 -24px -24px -24px', 
+              padding: '16px 24px', 
+              borderRadius: '0 0 12px 12px',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: '10px'
+            }}>
+              <button 
+                className="btn-cancel"
+                onClick={() => setShowWithdrawModal(false)}
+                style={{
+                  padding: '8px 24px',
+                  background: '#D3F0F9',
+                  color: '#4a5568',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  transition: 'background 0.2s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#b8e4f0'}
+                onMouseLeave={(e) => e.currentTarget.style.background = '#D3F0F9'}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  setShowWithdrawModal(false);
+                  handleWithdraw(selectedWithdrawApp);
+                }}
+                disabled={withdrawing}
+                style={{ 
+                  padding: '8px 24px',
+                  background: '#dc2626',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: withdrawing ? 'not-allowed' : 'pointer',
+                  fontWeight: '500',
+                  transition: 'background 0.2s ease',
+                  opacity: withdrawing ? 0.6 : 1
+                }}
+                onMouseEnter={(e) => {
+                  if (!withdrawing) {
+                    e.currentTarget.style.background = '#b91c1c';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!withdrawing) {
+                    e.currentTarget.style.background = '#dc2626';
+                  }
+                }}
+              >
+                {withdrawing ? 'Withdrawing...' : 'Yes, Withdraw'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Success Notification */}
+      {successMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: '20px',
+          right: '20px',
+          padding: '12px 20px',
+          background: '#0D9488',
+          color: 'white',
+          borderRadius: '8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px'
         }}>
-          {selectedWithdrawApp.job_postings?.position_title || 'Position Not Found'}
-        </p>
-        <p style={{ 
-          color: '#6c757d', 
-          fontSize: '14px',
-          margin: 0
-        }}>
-          This action <strong>cannot be undone</strong>.
-        </p>
-      </div>
-      
-      {/* Actions */}
-      <div className="confirm-card-footer" style={{ 
-        margin: '0 -24px -24px -24px', 
-        padding: '16px 24px', 
-        borderRadius: '0 0 12px 12px',
-        display: 'flex',
-        justifyContent: 'flex-end',
-        gap: '10px'
-      }}>
-        <button 
-          className="btn-cancel"
-          onClick={() => setShowWithdrawModal(false)}
+          <CircularCheckSuccessIcon size={22} style={{ color: 'white' }} />
+          {successMessage}
+        </div>
+      )}
+
+      {/* ✅ Re-assess Modal */}
+      {reassessApp && (
+        <div
+          className="modal-overlay"
+          onClick={() => !reassessLoading && setReassessApp(null)}
           style={{
-            padding: '8px 24px',
-            background: '#D3F0F9',
-            color: '#4a5568',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: '500',
-            transition: 'background 0.2s ease'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#b8e4f0'}
-  onMouseLeave={(e) => e.currentTarget.style.background = '#D3F0F9'}
-        >
-          Cancel
-        </button>
-        <button 
-          onClick={() => {
-            setShowWithdrawModal(false);
-            handleWithdraw(selectedWithdrawApp);
-          }}
-          disabled={withdrawing}
-          style={{ 
-            padding: '8px 24px',
-            background: '#dc2626',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: withdrawing ? 'not-allowed' : 'pointer',
-            fontWeight: '500',
-            transition: 'background 0.2s ease',
-            opacity: withdrawing ? 0.6 : 1
-          }}
-          onMouseEnter={(e) => {
-            if (!withdrawing) {
-              e.currentTarget.style.background = '#b91c1c';
-            }
-          }}
-          onMouseLeave={(e) => {
-            if (!withdrawing) {
-              e.currentTarget.style.background = '#dc2626';
-            }
+            position: 'fixed', inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 9999, padding: 20
           }}
         >
-          {withdrawing ? 'Withdrawing...' : 'Yes, Withdraw'}
-        </button>
-      </div>
-    </div>
-  </div>
-)}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'white', borderRadius: '12px', padding: '24px',
+              maxWidth: '440px', width: '100%',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
+            }}
+          >
+            <h3 style={{ margin: '0 0 6px', fontSize: '18px', color: '#1a3a5c' }}>
+              Re-assess PDS
+            </h3>
+            <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
+              Upload a new Personal Data Sheet. Your application will be re-screened and the score updated. Your old score is saved in history.
+            </p>
 
-{/* Success Notification */}
-{successMessage && (
-  <div style={{
-    position: 'fixed',
-    bottom: '20px',
-    right: '20px',
-    padding: '12px 20px',
-    background: '#0D9488',
-    color: 'white',
-    borderRadius: '8px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-    zIndex: 9999,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px'
-  }}>
-    <CircularCheckSuccessIcon size={22} style={{ color: 'white' }} />
-    {successMessage}
-  </div>
-)}
+            {/* Current score */}
+            <div style={{
+              background: '#F8FAFC', border: '1px solid #E2E8F0',
+              borderRadius: '8px', padding: '10px 14px', marginBottom: '16px',
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+              <span style={{ fontSize: '12px', color: '#64748b' }}>Current score</span>
+              <span style={{ fontSize: '16px', fontWeight: 700, color: '#4F46E5' }}>
+                {getDisplayScore(reassessApp)}%
+              </span>
+            </div>
 
+            {reassessError && (
+              <div style={{
+                padding: '10px 12px', marginBottom: '14px', borderRadius: '8px',
+                background: '#FEF2F2', border: '1px solid #FEE2E2',
+                color: '#B91C1C', fontSize: '12px'
+              }}>
+                {reassessError}
+              </div>
+            )}
 
-          {/* Modal */}
+            {/* File picker */}
+            <label style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              padding: '24px', border: '2px dashed #C7D2FE', borderRadius: '8px',
+              background: reassessFile ? '#EEF2FF' : '#F8FAFC',
+              cursor: 'pointer',
+              fontSize: '13px',
+              color: reassessFile ? '#4F46E5' : '#64748b',
+              fontWeight: 600,
+              marginBottom: '16px'
+            }}>
+              {reassessFile ? `📄 ${reassessFile.name}` : '📁 Choose a new PDS (PDF)'}
+              <input
+                type="file"
+                accept=".pdf"
+                style={{ display: 'none' }}
+                onChange={(e) => setReassessFile(e.target.files[0] || null)}
+                disabled={reassessLoading}
+              />
+            </label>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setReassessApp(null)}
+                disabled={reassessLoading}
+                style={{
+                  padding: '10px 20px',
+                  background: '#F1F5F9', color: '#475569',
+                  border: '1px solid #E2E8F0', borderRadius: '6px',
+                  fontWeight: 600,
+                  cursor: reassessLoading ? 'not-allowed' : 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleReassess(reassessApp)}
+                disabled={reassessLoading || !reassessFile}
+                style={{
+                  padding: '10px 20px',
+                  background: reassessLoading ? '#4338CA' : '#4F46E5',
+                  color: 'white', border: 'none', borderRadius: '6px',
+                  fontWeight: 600,
+                  cursor: reassessLoading || !reassessFile ? 'not-allowed' : 'pointer',
+                  opacity: !reassessFile ? 0.5 : 1,
+                  display: 'flex', alignItems: 'center', gap: '6px'
+                }}
+              >
+                {reassessLoading ? (
+                  <>
+                    <span className="spinner" style={{ width: '14px', height: '14px' }} />
+                    Re-screening...
+                  </>
+                ) : (
+                  'Re-assess'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal (View Details) */}
       {showDetailsModal && selectedApplication && (
         <div className="modal-overlay" onClick={() => setShowDetailsModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '720px' }}>
             
-            {/* ── HEADER ── */}
             <div className="modal-header" style={{
               background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
               borderBottom: '1px solid #bfdbfe',
@@ -671,7 +825,6 @@ const getDisplayScore = (app) => {
 
             <div className="modal-body">
               
-              {/* ── POSITION INFORMATION ── */}
               <div className="detail-section" style={{ background: '#f8fafc', border: '1px solid #e8ebf5', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
                 <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#1a3a5c', letterSpacing: '0.8px', textTransform: 'uppercase', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ color: '#4F46E5' }}>■</span> Position Information
@@ -687,48 +840,40 @@ const getDisplayScore = (app) => {
                     </span>
                   </div>
                  
-
-                 
-                 
-
                  <div>
-  <span className="detail-label">Closing Date</span>
-  <span 
-    className="detail-value" 
-    style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      gap: '8px', 
-      marginTop: '4px',
-      fontWeight: 600, 
-      color: '#1a3a5c' /* standard dark text */
-    }}
-  >
-    {/* ✅ Glowing dot */}
-    <span style={{ 
-      width: '6px', 
-      height: '6px', 
-      borderRadius: '50%', 
-      background: '#f70909', /* amber */
-      boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.2)', /* glow */
-      flexShrink: 0 
-    }} />
-    {formatDate(selectedApplication.job_postings?.closing_date)}
-  </span>
-</div>
+                    <span className="detail-label">Closing Date</span>
+                    <span 
+                      className="detail-value" 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '8px', 
+                        marginTop: '4px',
+                        fontWeight: 600, 
+                        color: '#1a3a5c' /* standard dark text */
+                      }}
+                    >
+                      <span style={{ 
+                        width: '6px', 
+                        height: '6px', 
+                        borderRadius: '50%', 
+                        background: '#f70909', /* amber */
+                        boxShadow: '0 0 0 3px rgba(245, 158, 11, 0.2)', /* glow */
+                        flexShrink: 0 
+                      }} />
+                      {formatDate(selectedApplication.job_postings?.closing_date)}
+                    </span>
+                  </div>
 
-                      <div>
+                  <div>
                     <span className="detail-label">Monthly Salary</span>
                     <span className="detail-value" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: '#eef2ff', borderRadius: '6px', fontWeight: 700, color: '#1a3a5c' }}>
                       {formatSalary(selectedApplication.job_postings?.monthly_salary)}
                     </span>
                   </div>
                 </div>
-
-                
               </div>
 
-              {/* ── AI ASSESSMENT (Kept your exact logic, wrapped in your CSS) ── */}
               {(selectedApplication.ai_match_score != null || selectedApplication.ai_explanation?.percentage != null) && (
                 <div className="detail-section ai-detail-section" style={{ background: '#f8fafc', border: '1px solid #e8ebf5', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
                   <div className="ai-assessment-card">
@@ -785,7 +930,6 @@ const getDisplayScore = (app) => {
                       </div>
                     </div>
 
-                    {/* Qualification Breakdown */}
                     {selectedApplication.ai_explanation?.breakdown &&
                       Object.keys(selectedApplication.ai_explanation.breakdown).some(
                         key => !(selectedApplication.ai_explanation.breakdown[key].status && selectedApplication.ai_explanation.breakdown[key].status.toUpperCase().includes("NOT REQUIRED"))
@@ -836,7 +980,6 @@ const getDisplayScore = (app) => {
                       </div>
                     )}
 
-                    {/* Recommendations */}
                     {selectedApplication.ai_explanation?.recommendations?.length > 0 && (
                       <div className="ai-recommendations redesigned-recommendations">
                         <div className="recommendations-heading">
@@ -854,7 +997,6 @@ const getDisplayScore = (app) => {
                       </div>
                     )}
 
-                    {/* Disclaimer */}
                     <div className="ai-disclaimer">
                       <span className="disclaimer-icon">ⓘ</span>
                       <p>
@@ -865,7 +1007,6 @@ const getDisplayScore = (app) => {
                 </div>
               )}
 
-              {/* ── QUALIFICATIONS REQUIRED ── */}
               <div className="detail-section" style={{ background: '#f8fafc', border: '1px solid #e8ebf5', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
                 <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#1a3a5c', letterSpacing: '0.8px', textTransform: 'uppercase', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ color: '#0d9488' }}>■</span> Qualifications Required
@@ -888,7 +1029,6 @@ const getDisplayScore = (app) => {
                 </div>
               </div>
 
-              {/* ── APPLICATION STATUS ── */}
               <div className="detail-section" style={{ background: '#f8fafc', border: '1px solid #e8ebf5', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
                 <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#1a3a5c', letterSpacing: '0.8px', textTransform: 'uppercase', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span style={{ color: '#f59e0b' }}>■</span> Application Status
@@ -900,28 +1040,25 @@ const getDisplayScore = (app) => {
                 </div>
               </div>
 
-              {/* ── DOCUMENTS SUBMITTED ── */}
-<div className="detail-section" style={{ background: '#f8fafc', border: '1px solid #e8ebf5', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
-  <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#1a3a5c', letterSpacing: '0.8px', textTransform: 'uppercase', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
-    {/* ✅ Replaced square with glowing dot */}
-    <span style={{ 
-      width: '8px', 
-      height: '8px', 
-      borderRadius: '50%', 
-      background: '#6366f1',
-      boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.15)',
-      flexShrink: 0 
-    }} /> 
-    Documents Submitted
-  </h4>
-  <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#1a1f36' }}>
-    {selectedApplication.docs_submitted?.pds && <span className="doc-check" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ color: '#10b981' }}>✓</span> Personal Data Sheet (PDS)</span>}
-    {selectedApplication.docs_submitted?.transcript && <span className="doc-check" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ color: '#10b981' }}>✓</span> Transcript of Records</span>}
-    {selectedApplication.docs_submitted?.performanceRating && <span className="doc-check" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ color: '#10b981' }}>✓</span> Performance Rating</span>}
-  </div>
-</div>
+              <div className="detail-section" style={{ background: '#f8fafc', border: '1px solid #e8ebf5', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
+                <h4 style={{ fontSize: '12px', fontWeight: 700, color: '#1a3a5c', letterSpacing: '0.8px', textTransform: 'uppercase', margin: '0 0 14px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{ 
+                    width: '8px', 
+                    height: '8px', 
+                    borderRadius: '50%', 
+                    background: '#6366f1',
+                    boxShadow: '0 0 0 3px rgba(99, 102, 241, 0.15)',
+                    flexShrink: 0 
+                  }} /> 
+                  Documents Submitted
+                </h4>
+                <div className="documents-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#1a1f36' }}>
+                  {selectedApplication.docs_submitted?.pds && <span className="doc-check" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ color: '#10b981' }}>✓</span> Personal Data Sheet (PDS)</span>}
+                  {selectedApplication.docs_submitted?.transcript && <span className="doc-check" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ color: '#10b981' }}>✓</span> Transcript of Records</span>}
+                  {selectedApplication.docs_submitted?.performanceRating && <span className="doc-check" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><span style={{ color: '#10b981' }}>✓</span> Performance Rating</span>}
+                </div>
+              </div>
 
-              {/* Close Button */}
               <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
                 <button 
                   className="close-btn" 
