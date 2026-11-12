@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import { createJobPosting, getJobPostings, updateJobStatuses } from "../services/jobService";
 import '/src/styles/JobPostingPage.css';
-import { EditJobIcon, TrashCircleIcon, MapNavigationIcon, BasiconsBriefcaseIcon, BasiconsInstructionsIcon, CircularCheckSuccessIcon, CheckMarkSquareInterviewIcon, DocumentMonoIcon } from "../components/icons/CustomIcons";
+import { EditJobIcon, TrashCircleIcon, MapNavigationIcon, BasiconsLock, BasiconsBriefcaseIcon, BasiconsInstructionsIcon, CircularCheckSuccessIcon, CheckMarkSquareInterviewIcon, DocumentMonoIcon } from "../components/icons/CustomIcons";
 import Loader from '../components/Loader';
 import communityLogo from '../assets/community-icon.png';
 import calendarclockLogo from '../assets/calendar-clock-icon.png';
@@ -468,15 +468,19 @@ const handleDeleteJob = async () => {
   }
 };
 
-  const toggleRequiredDoc = (docName) => {
-    setNewJob({
-      ...newJob,
-      requiredDocs: {
-        ...newJob.requiredDocs,
-        [docName]: !newJob.requiredDocs[docName]
-      }
-    });
-  };
+ const toggleRequiredDoc = (docName) => {
+  // PDS is always required — cannot be unchecked
+  if (docName === 'pds') {
+    return;
+  }
+  setNewJob({
+    ...newJob,
+    requiredDocs: {
+      ...newJob.requiredDocs,
+      [docName]: !newJob.requiredDocs[docName]
+    }
+  });
+};
 
   const handlePositionTitleChange = (title) => {
     const sg = POSITION_SG_MAPPING[title] || "";
@@ -656,8 +660,39 @@ useEffect(() => {
       {showForm && (
         <div className="modal-overlay" onClick={() => setShowForm(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Post New Job Vacancy</h2>
+            <div className="modal-header" style={{
+        background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+        borderBottom: '1px solid #bfdbfe',
+        borderRadius: '16px 16px 0 0',
+        padding: '20px 24px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '12px'
+      }}>
+        <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              background: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 2px 6px rgba(37,99,235,0.12)',
+              flexShrink: 0
+            }}>
+              <span style={{ fontSize: '18px' }}><BasiconsBriefcaseIcon size={20} color="#4F46E5" /></span>
+            </div>
+              
+              <h2 style={{
+  margin: 0,
+  marginRight: 'auto',
+  fontSize: '18px',
+  fontWeight: 700,
+  color: '#1a1f36',
+}}>
+  Post New Job Vacancy
+</h2>
               <button className="close-modal" onClick={() => setShowForm(false)}>×</button>
             </div>
             <div className="modal-body">
@@ -824,36 +859,113 @@ useEffect(() => {
                 />
               </div>
 
-              <div className="form-group">
-                <label>Required Documents</label>
-                <div className="required-docs-section">
-                  <div className="checkbox-group">
-                    <input 
-                      type="checkbox" 
-                      checked={newJob.requiredDocs.pds} 
-                      onChange={() => toggleRequiredDoc('pds')} 
-                    />
-                    <label>Personal Data Sheet (PDS)</label>
-                  </div>
-                  <div className="checkbox-group">
-                    <input 
-                      type="checkbox" 
-                      checked={newJob.requiredDocs.transcriptRecords} 
-                      onChange={() => toggleRequiredDoc('transcriptRecords')} 
-                    />
-                    <label>Transcript of Records</label>
-                  </div>
-                  <div className="checkbox-group">
-                    <input 
-                      type="checkbox" 
-                      checked={newJob.requiredDocs.performanceRating} 
-                      onChange={() => toggleRequiredDoc('performanceRating')} 
-                    />
-                    <label>Performance Rating</label>
-                  </div>
-                </div>
-              </div>
+            <div className="form-group">
+  <label style={{
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    fontSize: '12px',
+    fontWeight: 700,
+    color: '#1a3a5c',
+    letterSpacing: '0.8px',
+    textTransform: 'uppercase',
+    marginBottom: '12px'
+  }}>
+    <span style={{ color: '#f59e0b' }}>■</span>
+    Required Documents
+  </label>
 
+  <div style={{
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  }}>
+    {[
+      { key: 'pds', label: 'Personal Data Sheet (PDS)', sublabel: 'Primary document for screening', required: true },
+      { key: 'transcriptRecords', label: 'Transcript of Records', sublabel: 'Proof of educational attainment' },
+      { key: 'performanceRating', label: 'Performance Rating', sublabel: 'Most recent performance evaluation' },
+    ].map((doc) => (
+      <label
+        key={doc.key}
+        style={{
+          display: 'flex',
+          alignItems: 'center',              // ✅ CHANGED
+          gap: '12px',
+          padding: '12px 14px',
+          background: newJob.requiredDocs[doc.key] ? '#EEF2FF' : '#f8fafc',
+          border: `1px solid ${newJob.requiredDocs[doc.key] ? '#c7d2fe' : '#e8ebf5'}`,
+          borderRadius: '8px',
+          cursor: doc.required ? 'not-allowed' : 'pointer',
+          transition: 'all 0.15s ease',
+        }}
+      >
+        {/* Custom styled checkbox */}
+        <div style={{
+          width: '18px',
+          height: '18px',
+          borderRadius: '4px',
+          border: `2px solid ${newJob.requiredDocs[doc.key] ? '#4F46E5' : '#cbd5e1'}`,
+          background: newJob.requiredDocs[doc.key] ? '#4F46E5' : 'white',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          flexShrink: 0,
+          // ✅ REMOVED marginTop: '1px'
+          transition: 'all 0.15s ease',
+        }}>
+          {newJob.requiredDocs[doc.key] && (
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 6L9 17l-5-5" />
+            </svg>
+          )}
+        </div>
+
+        {/* Hidden native checkbox for accessibility */}
+        <input
+          type="checkbox"
+          checked={newJob.requiredDocs[doc.key]}
+          onChange={() => toggleRequiredDoc(doc.key)}
+          style={{ display: 'none' }}
+        />
+
+                {/* Left side: Text content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: '13px',
+            fontWeight: 600,
+            color: '#1a1f36',
+            marginBottom: '2px',
+          }}>
+            {doc.label}
+          </div>
+          <div style={{
+            fontSize: '11px',
+            color: '#64748b',
+            lineHeight: 1.4,
+          }}>
+            {doc.sublabel}
+          </div>
+        </div>
+
+        {/* ✅ Right side: REQUIRED badge */}
+        {doc.required && (
+          <span style={{
+            fontSize: '10px',
+            fontWeight: 700,
+            color: '#dc2626',
+            letterSpacing: '0.5px',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '3px',
+          }}>
+             REQUIRED
+          </span>
+        )}
+      </label>
+    ))}
+  </div>
+</div>
               <div className="modal-actions">
                 <button className="cancel-btn" onClick={() => setShowForm(false)}>Cancel</button>
                <button 
@@ -1419,28 +1531,45 @@ useEffect(() => {
         </div>
 
 
-{/* 🆕 LOCK BANNER */}
-        {isEditing && hasApplications && (
-          <div style={{
-            background: '#FEF3C7',
-            border: '1px solid #FDE68A',
-            borderRadius: '8px',
-            padding: '12px 16px',
-            marginBottom: '16px',
-            display: 'flex',
-            gap: '10px',
-            alignItems: 'flex-start',
-          }}>
-            <span style={{ fontSize: '18px' }}>🔒</span>
-            <div style={{ fontSize: '13px', color: '#92400E', lineHeight: 1.5 }}>
-              <strong>Qualification Standards are locked.</strong>{' '}
-              This job has {showDetails.applicants_count} applicant
-              {showDetails.applicants_count > 1 ? 's' : ''}. You can still update
-              Instructions, Place of Assignment, Closing Date (extend only), and Status.
-              To change requirements, close this job and post a new vacancy.
-            </div>
-          </div>
-        )}
+
+{isEditing && hasApplications && (
+  <div style={{
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '10px',
+    background: '#FFFBEB',
+    border: '1px solid #FDE68A',
+    borderRadius: '8px',
+    padding: '12px 14px',
+    marginBottom: '16px',
+  }}>
+    <i className="fas fa-lock"
+      style={{
+        color: '#B45309',
+        fontSize: '14px',
+        marginTop: '2px',
+      }}
+    />
+
+    <div style={{
+      fontSize: '12px',
+      color: '#92400E',
+      lineHeight: 1.6,
+    }}>
+      <strong style={{ fontSize: '13px' }}>
+        Qualification Standards Locked 
+      </strong>
+      <div>
+        This vacancy has {showDetails.applicants_count} applicant
+        {showDetails.applicants_count > 1 ? 's' : ''}.
+        To ensure fairness, qualification standards can no longer
+        be modified once applications have been received.
+        To revise them, close this vacancy and create a new posting.
+      </div>
+    </div>
+  </div>
+)}
+
 
 
         {/* ── INSTRUCTIONS ── */}
