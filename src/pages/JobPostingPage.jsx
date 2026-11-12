@@ -11,6 +11,7 @@ import clipboardactivitylogLogo from '../assets/clipboard-activitylog-icon.png';
 import calendarminimalLogo from '../assets/calendar-minimal-icon.png';
 import { supabase } from "../lib/supabase";
 import { logActivity } from "../lib/logActivity";
+import { useRef } from "react";
 
 // =========================
 // POSITION TITLES (Combined with Level)
@@ -114,8 +115,8 @@ const EDUCATION_LABELS = {
 // =========================
 const ELIGIBILITY_OPTIONS = [
   { label: "None Required", value: "none" },
-  { label: "Civil Service Subprofessional", value: "subprofessional" },
-  { label: "Civil Service Professional", value: "professional" },
+  { label: "Career Service Subprofessional", value: "subprofessional" },
+  { label: "Career Service Professional", value: "professional" },
 ];
 
 // =========================
@@ -538,7 +539,12 @@ const isLocked = (field) => hasApplications && ![
   'status'
 ].includes(field);
 
-
+const modalBodyRef = useRef(null);
+useEffect(() => {
+  if (modalBodyRef.current) {
+    modalBodyRef.current.scrollTop = 0;
+  }
+}, [showDetails, isEditing]);
   return (
     <>
       <Navbar userRole="hr" />
@@ -1154,31 +1160,9 @@ const isLocked = (field) => hasApplications && ![
         }}>×</button>
       </div>
 
-       <div className="modal-body">
+       <div className="modal-body" ref={modalBodyRef}>
 
-        {/* 🆕 LOCK BANNER */}
-        {isEditing && hasApplications && (
-          <div style={{
-            background: '#FEF3C7',
-            border: '1px solid #FDE68A',
-            borderRadius: '8px',
-            padding: '12px 16px',
-            marginBottom: '16px',
-            display: 'flex',
-            gap: '10px',
-            alignItems: 'flex-start',
-          }}>
-            <span style={{ fontSize: '18px' }}>🔒</span>
-            <div style={{ fontSize: '13px', color: '#92400E', lineHeight: 1.5 }}>
-              <strong>Qualification Standards are locked.</strong>{' '}
-              This job has {showDetails.applicants_count} applicant
-              {showDetails.applicants_count > 1 ? 's' : ''}. You can still update
-              Instructions, Place of Assignment, Closing Date (extend only), and Status.
-              To change requirements, close this job and post a new vacancy.
-            </div>
-          </div>
-        )}
-
+       
         {/* ── JOB DETAILS ── */}
         <div style={{
           background: '#f8fafc',
@@ -1433,6 +1417,31 @@ const isLocked = (field) => hasApplications && ![
             </div>
           </div>
         </div>
+
+
+{/* 🆕 LOCK BANNER */}
+        {isEditing && hasApplications && (
+          <div style={{
+            background: '#FEF3C7',
+            border: '1px solid #FDE68A',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            marginBottom: '16px',
+            display: 'flex',
+            gap: '10px',
+            alignItems: 'flex-start',
+          }}>
+            <span style={{ fontSize: '18px' }}>🔒</span>
+            <div style={{ fontSize: '13px', color: '#92400E', lineHeight: 1.5 }}>
+              <strong>Qualification Standards are locked.</strong>{' '}
+              This job has {showDetails.applicants_count} applicant
+              {showDetails.applicants_count > 1 ? 's' : ''}. You can still update
+              Instructions, Place of Assignment, Closing Date (extend only), and Status.
+              To change requirements, close this job and post a new vacancy.
+            </div>
+          </div>
+        )}
+
 
         {/* ── INSTRUCTIONS ── */}
         {isEditing ? (
