@@ -479,20 +479,44 @@ if (application.documents.pds) {
   docFileNames.pds = profileDocs.pds_file_url;
 }
 
-// TOR — use uploaded if provided, else profile
+// TOR — use uploaded if provided, else COPY from profile
 if (application.documents.transcript) {
   const result = await uploadFile(application.documents.transcript, `${selectedJob.id}/${applicant.id}`, 'transcript');
   docFileNames.transcript = result.fileName;
 } else if (profileDocs.tor_file_url) {
-  docFileNames.transcript = profileDocs.tor_file_url;
+  // ✅ Download from profile folder, re-upload to application folder
+  try {
+    const res = await fetch(profileDocs.tor_file_url);
+    if (!res.ok) throw new Error('Could not fetch profile transcript');
+    const blob = await res.blob();
+    const ext = profileDocs.tor_file_url.split('.').pop().split('?')[0];
+    const file = new File([blob], `transcript.${ext}`, { type: blob.type });
+    const result = await uploadFile(file, `${selectedJob.id}/${applicant.id}`, 'transcript');
+    docFileNames.transcript = result.fileName;
+  } catch (err) {
+    console.error('Failed to copy transcript from profile:', err);
+    docFileNames.transcript = profileDocs.tor_file_url;   // fallback to URL
+  }
 }
 
 // Performance Rating — use uploaded if provided, else profile
+// Performance Rating — use uploaded if provided, else COPY from profile
 if (application.documents.performanceRating) {
   const result = await uploadFile(application.documents.performanceRating, `${selectedJob.id}/${applicant.id}`, 'performanceRating');
   docFileNames.performanceRating = result.fileName;
 } else if (profileDocs.performance_rating_file_url) {
-  docFileNames.performanceRating = profileDocs.performance_rating_file_url;
+  try {
+    const res = await fetch(profileDocs.performance_rating_file_url);
+    if (!res.ok) throw new Error('Could not fetch profile PR');
+    const blob = await res.blob();
+    const ext = profileDocs.performance_rating_file_url.split('.').pop().split('?')[0];
+    const file = new File([blob], `performanceRating.${ext}`, { type: blob.type });
+    const result = await uploadFile(file, `${selectedJob.id}/${applicant.id}`, 'performanceRating');
+    docFileNames.performanceRating = result.fileName;
+  } catch (err) {
+    console.error('Failed to copy PR from profile:', err);
+    docFileNames.performanceRating = profileDocs.performance_rating_file_url;
+  }
 }
 
 const docsSubmitted = {

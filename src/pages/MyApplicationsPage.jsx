@@ -19,6 +19,7 @@ export default function MyApplicationsPage() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
 
+
   // Alert Withdrawal
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [selectedWithdrawApp, setSelectedWithdrawApp] = useState(null);
@@ -26,6 +27,7 @@ export default function MyApplicationsPage() {
   // ✅ Re-assessment State
   const [reassessApp, setReassessApp] = useState(null);
   const [reassessFile, setReassessFile] = useState(null);
+  const [reassessDocType, setReassessDocType] = useState('pds');  // 
   const [reassessLoading, setReassessLoading] = useState(false);
   const [reassessError, setReassessError] = useState('');
 
@@ -387,9 +389,12 @@ export default function MyApplicationsPage() {
   const [reassessSuccess, setReassessSuccess] = useState(null);
   const handleReassess = async (app) => {
   if (!reassessFile) {
-    setReassessError('Please choose a new PDS file.');
-    return;
-  }
+  const docLabel = reassessDocType === 'pds' ? 'PDS'
+    : reassessDocType === 'transcript' ? 'Transcript'
+    : 'Performance Rating';
+  setReassessError(`Please choose a new ${docLabel} file.`);
+  return;
+}
 
   setReassessLoading(true);
   setReassessError('');
@@ -397,10 +402,12 @@ export default function MyApplicationsPage() {
   const oldScore = getDisplayScore(app);
 
   try {
-    const { newScore } = await reassessApplication({
-      application: app,
-      newFile: reassessFile
-    });
+    const result = await reassessApplication({
+  application: app,
+  newFile: reassessFile,
+  docType: reassessDocType,
+});
+const { newScore, docType } = result;
 
     setReassessApp(null);
     setReassessFile(null);
@@ -416,8 +423,14 @@ export default function MyApplicationsPage() {
       setSelectedApplication({ ...updatedApp, job_postings: app.job_postings });
     }
 
-    // 🆕 Show the success popup
-    setReassessSuccess({ app, oldScore, newScore });
+    // 🆕 Show the success popup only for PDS re-assessment (score changes)
+if (docType === 'pds') {
+  setReassessSuccess({ app, oldScore, newScore });
+} else {
+  setSuccessMessage(`${docType === 'transcript' ? 'Transcript' : 'Performance Rating'} updated successfully!`);
+  setTimeout(() => setSuccessMessage(null), 3000);
+}
+
 
   } catch (err) {
     console.error('Re-assessment error:', err);
@@ -692,24 +705,30 @@ export default function MyApplicationsPage() {
               boxShadow: '0 20px 60px rgba(0,0,0,0.2)'
             }}
           >
-            <h3 style={{ margin: '0 0 6px', fontSize: '18px', color: '#1a3a5c' }}>
-              Upload New PDS
-            </h3>
-            <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
-              Upload a new Personal Data Sheet. Your application will be re-screened and the score updated.
-            </p>
+           <h3 style={{ margin: '0 0 6px', fontSize: '18px', color: '#1a3a5c' }}>
+  {reassessDocType === 'pds' ? 'Re-assess PDS'
+    : reassessDocType === 'transcript' ? 'Update Transcript of Records'
+    : 'Update Performance Rating'}
+</h3>
+<p style={{ margin: '0 0 16px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
+  {reassessDocType === 'pds'
+    ? 'Upload a new Personal Data Sheet. Your application will be re-screened and the score updated. Your old score is saved in history.'
+    : 'Upload a new file. This will replace the existing document on your application.'}
+</p>
 
             {/* Current score */}
-            <div style={{
-              background: '#F8FAFC', border: '1px solid #E2E8F0',
-              borderRadius: '8px', padding: '10px 14px', marginBottom: '16px',
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center'
-            }}>
-              <span style={{ fontSize: '12px', color: '#64748b' }}>Current score</span>
-              <span style={{ fontSize: '16px', fontWeight: 700, color: '#4F46E5' }}>
-                {getDisplayScore(reassessApp)}%
-              </span>
-            </div>
+            {reassessDocType === 'pds' && (
+  <div style={{
+    background: '#F8FAFC', border: '1px solid #E2E8F0',
+    borderRadius: '8px', padding: '10px 14px', marginBottom: '16px',
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+  }}>
+    <span style={{ fontSize: '12px', color: '#64748b' }}>Current score</span>
+    <span style={{ fontSize: '16px', fontWeight: 700, color: '#4F46E5' }}>
+      {getDisplayScore(reassessApp)}%
+    </span>
+  </div>
+)}
 
             {reassessError && (
               <div style={{
@@ -731,20 +750,24 @@ export default function MyApplicationsPage() {
   fontWeight: 600,
   marginBottom: '16px'
 }}>
-  {reassessFile ? (
-    <>
-      <BasiconsDocumentIcon size={16} color="#4F46E5" />
-      {reassessFile.name}
-    </>
-  ) : (
-    <>
-      <BasiconsFolderIcon size={16} color="#64748b" />
-      Choose a new PDS
-    </>
-  )}
+ {reassessFile ? (
+  <>
+    <BasiconsDocumentIcon size={16} color="#4F46E5" />
+    {reassessFile.name}
+  </>
+) : (
+  <>
+    <BasiconsFolderIcon size={16} color="#64748b" />
+    {reassessDocType === 'pds'
+      ? 'Choose a new PDS'
+      : reassessDocType === 'transcript'
+      ? 'Choose a Transcript file'
+      : 'Choose a Performance Rating file'}
+  </>
+)}
   <input
     type="file"
-    accept=".xlsx,.xls"
+    accept=".pdf,.xlsx,.xls,.doc,.docx"
     style={{ display: 'none' }}
     onChange={(e) => setReassessFile(e.target.files[0] || null)}
     disabled={reassessLoading}
@@ -754,8 +777,11 @@ export default function MyApplicationsPage() {
             {/* Actions */}
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
               <button
-                onClick={() => setReassessApp(null)}
-                disabled={reassessLoading}
+                onClick={() => {
+    setReassessApp(null);
+    setReassessDocType('pds');
+  }}
+  disabled={reassessLoading}
                 style={{
                   padding: '10px 20px',
                   background: '#F1F5F9', color: '#475569',
@@ -1069,33 +1095,35 @@ export default function MyApplicationsPage() {
       </div>
       
       {/* Re-upload button for PDS */}
-      {['PENDING', 'REVIEWING'].includes(selectedApplication.status) && (
-        <button
-          onClick={() => {
-            setReassessApp(selectedApplication);
-            setReassessFile(null);
-            setReassessError('');
-          }}
-          style={{
-            padding: '6px 12px',
-            background: '#EEF2FF',
-            color: '#4F46E5',
-            border: '1px solid #c7d2fe',
-            borderRadius: '6px',
-            fontSize: '11px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '4px',
-            transition: 'background 0.2s ease'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.background = '#e0e7ff'}
-          onMouseLeave={(e) => e.currentTarget.style.background = '#EEF2FF'}
-        >
-           Upload New
-        </button>
-      )}
+     {/* Re-upload button for PDS */}
+{['PENDING', 'REVIEWING'].includes(selectedApplication.status) && (
+  <button
+    onClick={() => {
+      setReassessApp(selectedApplication);
+      setReassessDocType('pds');      // ✅ identifies this as PDS re-assess
+      setReassessFile(null);
+      setReassessError('');
+    }}
+    style={{
+      padding: '6px 12px',
+      background: '#EEF2FF',
+      color: '#4F46E5',
+      border: '1px solid #c7d2fe',
+      borderRadius: '6px',
+      fontSize: '11px',
+      fontWeight: 600,
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      transition: 'background 0.2s ease'
+    }}
+    onMouseEnter={(e) => e.currentTarget.style.background = '#e0e7ff'}
+    onMouseLeave={(e) => e.currentTarget.style.background = '#EEF2FF'}
+  >
+    Upload New
+  </button>
+)}
     </div>
 
     {/* --- TRANSCRIPT --- */}
@@ -1115,8 +1143,33 @@ export default function MyApplicationsPage() {
         
         {/* Placeholder for future Transcript re-upload */}
         {['PENDING', 'REVIEWING'].includes(selectedApplication.status) && (
-           <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>Coming soon</span>
-        )}
+  <button
+    onClick={() => {
+      setReassessApp(selectedApplication);
+      setReassessDocType('transcript');
+      setReassessFile(null);
+      setReassessError('');
+    }}
+    style={{
+      padding: '6px 12px',
+      background: '#EEF2FF',
+      color: '#4F46E5',
+      border: '1px solid #c7d2fe',
+      borderRadius: '6px',
+      fontSize: '11px',
+      fontWeight: 600,
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      transition: 'background 0.2s ease'
+    }}
+    onMouseEnter={(e) => e.currentTarget.style.background = '#e0e7ff'}
+    onMouseLeave={(e) => e.currentTarget.style.background = '#EEF2FF'}
+  >
+    {selectedApplication.docs_submitted?.transcript ? 'Replace' : 'Upload'}
+  </button>
+)}
       </div>
     )}
 
@@ -1136,9 +1189,34 @@ export default function MyApplicationsPage() {
         </div>
         
         {/* Placeholder for future PR re-upload */}
-        {['PENDING', 'REVIEWING'].includes(selectedApplication.status) && (
-           <span style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>Coming soon</span>
-        )}
+      {['PENDING', 'REVIEWING'].includes(selectedApplication.status) && (
+  <button
+    onClick={() => {
+      setReassessApp(selectedApplication);
+      setReassessDocType('performanceRating');
+      setReassessFile(null);
+      setReassessError('');
+    }}
+    style={{
+      padding: '6px 12px',
+      background: '#EEF2FF',
+      color: '#4F46E5',
+      border: '1px solid #c7d2fe',
+      borderRadius: '6px',
+      fontSize: '11px',
+      fontWeight: 600,
+      cursor: 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '4px',
+      transition: 'background 0.2s ease'
+    }}
+    onMouseEnter={(e) => e.currentTarget.style.background = '#e0e7ff'}
+    onMouseLeave={(e) => e.currentTarget.style.background = '#EEF2FF'}
+  >
+    {selectedApplication.docs_submitted?.performanceRating ? 'Replace' : 'Upload'}
+  </button>
+)}
       </div>
     )}
 

@@ -207,54 +207,77 @@ const [bulkUpdateSuccessMessage, setBulkUpdateSuccessMessage] = useState(null);
   };
 
   const viewDocument = async (jobId, applicantId, docType, docName) => {
-    try {
-      const { data, error } = await supabase.storage
-        .from('applicant_docs')
-        .list(`${jobId}/${applicantId}`);
+  try {
+    // ── STEP 1: Try the application folder first ──
+    const { data, error } = await supabase.storage
+      .from('applicant_docs')
+      .list(`${jobId}/${applicantId}`);
 
-      if (error || !data) {
-        alert('Could not find documents folder.');
-        return;
-      }
-
-      const matchingFiles = data.filter(f => 
-        f.name.toLowerCase().startsWith(docType.toLowerCase())
-      );
-      
-      if (matchingFiles.length === 0) {
-        alert(`No ${docName} file found.`);
-        console.log('Available files:', data.map(f => f.name));
-        return;
-      }
-
-      const sortedFiles = matchingFiles.sort((a, b) => {
-        return new Date(b.created_at) - new Date(a.created_at);
+    if (!error && data && data.length > 0) {
+      const matchingFiles = data.filter(f => {
+        const name = f.name.toLowerCase();
+        const type = docType.toLowerCase();
+        return name.startsWith(type + '-')
+            || name.startsWith(type + '_')
+            || name === type;
       });
 
-      const file = sortedFiles[0];
-      const filePath = `${jobId}/${applicantId}/${file.name}`;
-      const { data: urlData } = supabase.storage
-        .from('applicant_docs')
-        .getPublicUrl(filePath);
+      if (matchingFiles.length > 0) {
+        const sortedFiles = matchingFiles.sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at)
+        );
+        const file = sortedFiles[0];
+        const filePath = `${jobId}/${applicantId}/${file.name}`;
+        const { data: urlData } = supabase.storage
+          .from('applicant_docs')
+          .getPublicUrl(filePath);
 
-      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
-      const isWord = file.name.endsWith('.docx') || file.name.endsWith('.doc');
+        const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls');
+        const isWord = file.name.endsWith('.docx') || file.name.endsWith('.doc');
+
+        if (isExcel || isWord) {
+          const link = document.createElement('a');
+          link.href = urlData.publicUrl;
+          link.download = file.name;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } else {
+          window.open(urlData.publicUrl, '_blank');
+        }
+        return;
+      }
+    }
+
+    // ── STEP 2: Fallback — use doc_filenames URL if it's a full URL ──
+    const storedValue = selectedApplication?.doc_filenames?.[docType];
+    if (storedValue && typeof storedValue === 'string' && storedValue.startsWith('http')) {
+      const isExcel = storedValue.endsWith('.xlsx') || storedValue.endsWith('.xls');
+      const isWord  = storedValue.endsWith('.docx') || storedValue.endsWith('.doc');
 
       if (isExcel || isWord) {
         const link = document.createElement('a');
-        link.href = urlData.publicUrl;
-        link.download = file.name;
+        link.href = storedValue;
+        link.download = docType;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       } else {
-        window.open(urlData.publicUrl, '_blank');
+        window.open(storedValue, '_blank');
       }
-    } catch (error) {
-      console.error('Error viewing document:', error);
-      alert('Error viewing document. Please try again.');
+      return;
     }
-  };
+
+    // ── STEP 3: Nothing found ──
+    alert(`No ${docName} file found.`);
+    console.log('Files available in folder:', data?.map(f => f.name));
+    console.log('doc_filenames stored:', selectedApplication?.doc_filenames);
+
+  } catch (error) {
+    console.error('Error viewing document:', error);
+    alert('Error viewing document. Please try again.');
+  }
+};
 
   const loadJobAndCandidates = async () => {
     setLoading(true);
@@ -405,6 +428,7 @@ const [bulkUpdateSuccessMessage, setBulkUpdateSuccessMessage] = useState(null);
           applied_date: app.applied_date,
           status: app.status || 'PENDING',
           docs_submitted: app.docs_submitted || {},
+          doc_filenames: app.doc_filenames || {},   // ✅ ADD THIS LINE
           ai_match_score: app.ai_match_score || 0,
           education: extractEducation(breakdown),
           eligibility: extractEligibility(breakdown),
